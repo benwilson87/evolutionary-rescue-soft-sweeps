@@ -1,0 +1,86 @@
+---
+title: "Model-Description"
+author: "Ben Wilson"
+date: "November 16, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r load libraries, create colorblind friendly color palette}
+library(RColorBrewer)
+library(ggplot2)
+
+#Generate colorblind friendly palette from ColorBrewer
+cbPalette <- c(brewer.pal(6,"RdYlBu"))
+
+col1<-cbPalette[1]
+col2<-cbPalette[2]
+col3<-cbPalette[3]
+col4<-cbPalette[6]
+col5<-cbPalette[5]
+col6<-cbPalette[4]
+```
+
+```{r read in trajectory information}
+#Read in output to table
+wildtype<-read.table("../Analytics/wildtype_trajectory.csv", header=FALSE, sep=",")
+colnames(wildtype)<-c('t','n')
+wildtype$type<-'0'
+mutant<-read.table("../Analytics/mutant_trajectory.csv", header=FALSE, sep=",")
+colnames(mutant)<-c('t','n')
+mutant$type<-'1'
+trajectories<-wildtype[,1:2]
+trajectories$m1<-mutant[,2]
+trajectories$m2<-mutant[,2]/3
+colnames(trajectories)<-c('t','w','m1','m2')
+```
+
+
+```{r create plots for model visualization}
+#Plot labels
+xlabel<-expression(italic(t))
+ylabel<-"Count"
+wlabel<-expression(italic(w[0]))
+Neqlabel<-expression(italic(m)[eq.])
+testlabel<-expression(tau[est.])
+
+#ggplot object
+p <- ggplot(trajectories) +
+  geom_ribbon(aes(x=t+50,ymax=m2,ymin=0),fill=col1,alpha=0.40) + 
+  geom_ribbon(aes(x=t+50,ymax=m1,ymin=m2),fill=col2,alpha=0.40) +
+  geom_ribbon(aes(x=t,ymax=w,ymin=0),fill="black",alpha=0.10) +
+  geom_line(aes(x=t,y=w,colour="black")) + 
+  geom_line(aes(x=t+50,y=m1,colour=col1)) +
+  scale_colour_manual(values=c("black",col1),labels=c("wildtype count","mutant count"),name="") +
+  scale_y_continuous(breaks=c(9000,10000),labels=c(Neqlabel,wlabel))+
+  geom_hline(aes(yintercept=9000),linetype="dashed",alpha=0.5)+
+  scale_x_continuous(breaks=c(50),labels=c(testlabel))+
+  coord_cartesian(xlim=c(0,200),ylim=c(0,11000)) +
+  xlab(xlabel) +
+  ylab(ylabel) +
+  theme_bw() +
+  theme(
+        axis.title.x = element_text(size=11),
+        axis.text.y = element_text(size=11),
+        axis.title.y = element_text(size=11),
+        axis.text.x=element_text(size=11),
+        legend.title = element_text(size=11),
+        legend.text = element_text(size=10),
+        legend.background = element_rect(fill="transparent"),
+        legend.position = c(0.75,0.95),
+        panel.grid.major = element_blank(),
+        plot.margin=unit(c(0,0.1,0,0.1), "cm")
+        )
+p
+#Export ggplot object to pdf
+pdf(file="Model_Description.pdf",width=3.93,height=4)
+p
+dev.off()
+
+```
+

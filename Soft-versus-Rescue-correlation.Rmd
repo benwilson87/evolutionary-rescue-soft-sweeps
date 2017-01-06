@@ -1,0 +1,195 @@
+---
+title: "Soft-versus-Rescue-correlation"
+author: "Ben Wilson"
+date: "November 16, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load libraries}
+#Load libraries
+library(RColorBrewer)
+library(reshape2)
+library(plyr)
+library(grid)
+library(ggplot2)
+library(scales)
+library(gridExtra)
+
+```
+
+```{r define colorblind-friendly palette}
+#Create colorblind friendly color palette
+cbPalette <- c(brewer.pal(11,"RdYlBu"))
+
+col1<-cbPalette[1]
+col2<-cbPalette[2]
+col3<-cbPalette[3]
+col4<-cbPalette[4]
+col5<-cbPalette[5]
+col6<-cbPalette[6]
+col7<-cbPalette[7]
+col8<-cbPalette[8]
+col9<-cbPalette[9]
+col10<-cbPalette[10]
+col11<-cbPalette[11]
+
+```
+
+```{r read in data from flatfile}
+#Read in output to table
+simulation<-read.table("../Output/fixation_statistics.csv", header=TRUE, sep=",")
+```
+
+```{r set values that will be used for plotting}
+#Define alpha for each simulation
+simulation$alpha <- abs(simulation$b_w - simulation$d_w)
+
+#Create line for heuristic correlation boundary
+heuristic<-data.frame(rescue=1:99/100,soft=rep(0,99))
+for(i in 1:length(heuristic[,1])) {
+  heuristic$soft[i]<-1+(1/heuristic$rescue[i]-1)*log(1-heuristic$rescue[i])
+}
+#Deine initial population size
+w0 <- 10000
+```     
+
+```{r high-density rescue plot}
+######################Create plots for high-densityrescue#############################
+#Define carrying capacity
+K.value.high <-10000
+    
+#Create a subset of the simulation data
+simulation.data.high <- subset(simulation, simulation$Kmax==K.value.high, select=c(p_soft,p_hard,p_ext,alpha,b_m,wU))
+simulation.data.high$w_star.binary <- 0 
+w_star.mu <- 0
+
+#Add variable for w* to be used for conditional formatting
+for(i in 1:length(simulation.data.high[,1])) {
+  w_star.mu <- (K.value.high*(1-1.0/simulation.data.high$b_m[i]))*simulation.data.high$wU[i]/w0
+  simulation.data.high$w_star.binary[i] <- w_star.mu>=1 
+}
+
+#Subset regime where we expect soft sweeps
+simulation.data.high.soft<-subset(simulation.data.high, simulation.data.high$w_star.binary==1, select=c(p_soft,p_hard,p_ext,alpha,b_m,wU))
+
+xlabel<-expression(italic(P)[rescue])
+ylabel<-expression(paste(italic(P)[soft],"|",italic(P)[rescue]))
+p.high <- ggplot(simulation.data.high,aes(x=1-p_ext,y=p_soft/(1-p_ext))) +
+  geom_point(aes(shape=factor(b_m),colour=factor(alpha),size=factor(wU))) +
+  geom_point(data=simulation.data.high.soft, aes(shape=factor(b_m),colour=factor(alpha),size=factor(wU),fill=factor(alpha))) +
+  scale_colour_manual(values=c(col5,col4,col3,col2,col1),name=expression(italic(alpha))) +
+  scale_fill_manual(values=c(col5,col4,col3,col2,col1),guide="none") +
+  scale_shape_manual(values=c(21,22,24),name=expression(italic(b[m]))) +
+  scale_size_manual(values=c(3,5,7),name=expression(paste(italic(w)[0],italic(mu)))) +
+  geom_line(data=heuristic,aes(x=heuristic$rescue,y=heuristic$soft),colour=col1,alpha=0.5)+
+  xlim(-0.1,1.1) +
+  ylim(-0.1,1.1) +
+  xlab(xlabel) +
+  ylab(ylabel) +
+  theme(plot.title = element_text(size=11),
+        axis.title.x = element_text(size=11),
+        axis.text.x = element_text(size=9), 
+        axis.title.y = element_text(size=11),
+        axis.text.y = element_text(size=9),
+        legend.title = element_text(size=11),
+        legend.background = element_rect(fill="transparent"),
+        legend.text = element_text(size=11),
+        plot.margin=unit(c(0,0.1,0,0.1), "cm"))
+assign("high.rescue.plot",p.high)
+```
+
+```{r low-density rescue plots}
+##################################Create plots for low-density rescue###########################
+#Define carrying capacity
+K.value.low <-110000
+
+#Create a subset of the simulation data
+simulation.data.low <-subset(simulation, simulation$Kmax==K.value.low, select=c(p_soft,p_hard,p_ext,alpha,b_m,wU))
+simulation.data.low$w_star.binary <- 0 
+w_star.mu <- 0
+#Add variable for w*
+for(i in 1:length(simulation.data.low[,1])) {
+  w_star.mu <- (K.value.low*(1-1.0/simulation.data.low$b_m[i]))*simulation.data.low$wU[i]/w0
+  simulation.data.low$w_star.binary[i] <- w_star.mu>=1 
+}
+
+#Subset regime where we expect soft sweeps
+simulation.data.low.soft<-subset(simulation.data.low, simulation.data.low$w_star.binary==1, select=c(p_soft,p_hard,p_ext,alpha,b_m,wU))
+
+xlabel<-expression(italic(P)[rescue])
+ylabel<-expression(paste(italic(P)[soft],"|",italic(P)[rescue]))
+p.low <- ggplot(simulation.data.low,aes(x=1-p_ext,y=p_soft/(1-p_ext))) +
+  geom_point(aes(shape=factor(b_m),colour=factor(alpha),size=factor(wU))) + 
+  geom_point(data=simulation.data.low.soft, aes(shape=factor(b_m),colour=factor(alpha),size=factor(wU),fill=factor(alpha))) +
+  scale_colour_manual(values=c(col7,col8,col9,col10,col11),name=expression(italic(alpha))) +
+  scale_fill_manual(values=c(col7,col8,col9,col10,col11),guide="none") +
+  scale_shape_manual(values=c(21,22,24),name=expression(italic(b[m]))) +
+  scale_size_manual(values=c(3,5,7),name=expression(paste(italic(w)[0],italic(mu)))) +
+  geom_line(data=heuristic,aes(x=heuristic$rescue,y=heuristic$soft),colour=col11,alpha=0.5)+
+  xlim(-0.1,1.1) +
+  ylim(-0.1,1.1) +
+  xlab(xlabel) +
+  ylab(ylabel) +
+  theme(plot.title = element_text(size=11),
+        axis.title.x = element_text(size=11),
+        axis.text.x = element_text(size=9), 
+        axis.title.y = element_text(size=11),
+        axis.text.y = element_text(size=9),
+        legend.title = element_text(size=11),
+        legend.background = element_rect(fill="transparent"),
+        legend.text = element_text(size=11),
+        plot.margin=unit(c(0,0.1,0,0.1), "cm"))
+
+assign("low.rescue.plot",p.low)
+
+```
+
+```{r combined plot with both rescue scenarios}
+########################### 2 SCENARIO PLOTS ##############################
+#Function to generate shared legend
+generate_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+shared.legend <- generate_legend(high.rescue.plot)
+
+combined.plot <- grid.arrange(
+  arrangeGrob(low.rescue.plot + annotate("text",x=0.15,y=0.95,label="Low-density",size=4,colour="black") + theme(panel.background = element_rect(fill = "darkgrey"),axis.title.x = element_blank(),axis.title.y = element_blank(),plot.title = element_blank(),legend.position="none"),
+              high.rescue.plot + annotate("text",x=0.15,y=0.95,label="High-density",size=4,colour="black") + theme(panel.background = element_rect(fill = "darkgrey"),axis.title.x = element_blank(),axis.title.y = element_blank(),plot.title = element_blank(),legend.position="none"),
+              
+              nrow=2),
+  ncol=2,
+  shared.legend,
+  left = textGrob(ylabel, rot = 90, vjust = 1, gp = gpar(fontsize = 11)),
+  sub = textGrob(xlabel,vjust=1, gp = gpar(fontsize = 11)),
+  heights=c(0.95,0.05),
+  widths=c(0.8,0.2)
+)
+
+```
+
+```{r export plot to pdf}
+pdf(file="Soft_vs_Rescue_correlation.pdf",width=3.92,height=8)
+grid.arrange(
+  arrangeGrob(low.rescue.plot + annotate("text",x=0.15,y=0.95,label="Low-density",size=4,colour="black") + theme(panel.background = element_rect(fill = "darkgrey"),axis.title.x = element_blank(),axis.title.y = element_blank(),plot.title = element_blank(),legend.position="none"),
+              high.rescue.plot + annotate("text",x=0.15,y=0.95,label="High-density",size=4,colour="black") + theme(panel.background = element_rect(fill = "darkgrey"),axis.title.x = element_blank(),axis.title.y = element_blank(),plot.title = element_blank(),legend.position="none"),
+              
+              nrow=2),
+  ncol=2,
+  shared.legend,
+  left = textGrob(ylabel, rot = 90, vjust = 1, gp = gpar(fontsize = 11)),
+  sub = textGrob(xlabel,vjust=1, gp = gpar(fontsize = 11)),
+  heights=c(0.95,0.05),
+  widths=c(0.8,0.2)
+)
+dev.off()
+```
+

@@ -1,0 +1,91 @@
+---
+title: "Establishment-Time-Distributions"
+author: "Ben Wilson"
+date: "November 16, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load libraries, create colorblind friendly color palette}
+library(RColorBrewer)
+library(reshape2)
+library(plyr)
+library(grid)
+library(ggplot2)
+library(scales)
+
+cbPalette <- c(brewer.pal(6,"RdYlBu"))
+
+col1<-cbPalette[1]
+col2<-cbPalette[2]
+col3<-cbPalette[6]
+col4<-cbPalette[5]
+
+```
+
+```{r read in data from output files}
+
+#Read in output to table
+establishments.low<-read.table("../Output/establishment_distribution_low.csv", header=TRUE,sep=",")
+analytic.t1.low<-read.table("../Analytics/T1_low_full.csv",header=FALSE,sep=",")
+analytic.t2.low<-read.table("../Analytics/T2_low_full.csv",header=FALSE,sep=",")
+
+#Append zero densities for analysis where probability density is essentially zero
+zero.rows <- data.frame(V1 = c(800,920), V2 =c(0,0))
+analytic.t1.low <- rbind(analytic.t1.low,zero.rows)
+analytic.t2.low <- rbind(analytic.t2.low,zero.rows)
+
+#Subset out establishment data for rescue scenarios
+#establishments.low<-subset(establishments, establishments$Kmax==110000,select=c(t_1,t_2))
+
+```
+
+
+```{r fix constant to be put on plot}
+t.end <- log(10000)/0.01
+```
+
+
+```{r create plots for comparison}
+
+#Plot labels
+xlabel<-expression(italic(tau))
+ylabel<-expression(italic(p(tau)))
+tlabel <- expression(italic(tau)[end])
+
+p<-ggplot(data=establishments.low)
+p<-p+
+  geom_histogram(aes(x=t_1,y=..density..),alpha=0.7,fill=col3) +
+  geom_histogram(aes(x=t_2,y=..density..),alpha=0.5,fill=col1) +
+  geom_line(data=analytic.t1.low,aes(x=V1,y=V2,colour=col3),size=1,alpha=0.9) +
+  geom_line(data=analytic.t2.low,aes(x=V1,y=V2,colour=col1),size=1,alpha=0.8) +
+  geom_vline(aes(xintercept=t.end),linetype="dashed",alpha=0.5)+
+  xlim(0,1000) +
+  scale_colour_manual(values=c(col3,col1),labels=c(expression(italic(tau[1])),expression(italic(tau[2]))),name="") +
+  annotate("text",x=t.end-50,y=0.001,label=paste(tlabel),parse=TRUE,size=4) +
+  xlab(xlabel) +
+  ylab(ylabel) +
+  theme_bw() +
+  theme(plot.title = element_text(size=11),
+        axis.title.x = element_text(size=11),
+        axis.text.x = element_text(size=10), 
+        axis.title.y = element_text(size=11),
+        axis.text.y = element_text(size=10),
+        legend.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        legend.background = element_rect(fill="transparent"),
+        legend.position = c(0.8,0.8),
+        plot.margin=unit(c(0,0.1,0,0.1), "cm"))
+
+p
+pdf(file="Establishment_Time_Distributions.pdf",width=6.83,height=4)
+p
+dev.off()
+
+
+```
+

@@ -1,0 +1,253 @@
+---
+title: "Rescue-Hard-Soft-comparison"
+author: "Ben Wilson"
+date: "November 16, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load libraries and create colorblind friendly color palette}
+#Load libraries
+library(RColorBrewer)
+library(reshape2)
+library(plyr)
+library(grid)
+library(ggplot2)
+library(scales)
+library(gridExtra)
+
+#Create colorblind friendly color palette
+cbPalette <- c(brewer.pal(6,"RdYlBu"))
+
+col1<-cbPalette[1]
+col2<-cbPalette[2]
+col3<-cbPalette[3]
+col4<-cbPalette[6]
+col5<-cbPalette[5]
+col6<-cbPalette[4]
+
+```
+
+
+```{r read data from file into data frame}
+#Read in output to table
+simulation<-read.table("../Output/fixation_statistics.csv", header=TRUE, sep=",")
+analytics.low<-read.table("../Analytics/p_low.csv",header=FALSE,sep=",")
+analytics.high<-read.table("../Analytics/p_high.csv",header=FALSE,sep=",")
+colnames(analytics.low)<-c("Kmax","b_w","d_w","b_m","d_m","mu","p_rescue","p_hard")
+colnames(analytics.high)<-c("Kmax","b_w","d_w","b_m","d_m","mu","p_rescue","p_hard")
+```
+
+```{r define variables for analysis/simulations}
+#Define alpha for each simulation
+simulation$alpha <- abs(simulation$b_w - simulation$d_w)
+
+#Define initial population size
+w0 <- 10000
+
+#...and convert analytics parameters to match simulation parameters
+analytics.low$alpha <- abs(analytics.low$b_w - analytics.low$d_w)
+analytics.low$wU <- analytics.low$mu*w0
+analytics.high$alpha <- abs(analytics.high$b_w - analytics.high$d_w)
+analytics.high$wU <- analytics.high$mu*w0
+
+#Create vectors for variable mutation rate and mutant birth rate, other parameters explored
+wU.values<-c(10,1.0,0.1)
+bM.values<-c(1.1,1.3,2.0)
+alpha.values<-c(0.01,0.03,0.1,0.3,1.0)
+
+```
+
+```{r create data frame for approximation in low-density rescue}
+approximations <- expand.grid(wU = wU.values, b_m = bM.values, alpha = alpha.values)
+approximations$lambda <- (approximations$wU/approximations$alpha)*(approximations$b_m - 1.0)
+approximations$p_rescue <- 1.0 - exp(-approximations$lambda)
+approximations$p_hard <- approximations$lambda*exp(-approximations$lambda)
+approximations$p_soft <- approximations$p_rescue - approximations$p_hard
+  
+```
+
+```{r create plots for high-density rescue (grid style)}
+
+######################Create plots for high-density rescue#############################
+for(i in 1:length(wU.values)){
+  for(j in 1:length(bM.values)){
+    wU.value <-wU.values[i]
+    bM.value <-bM.values[j]
+    K.value <-10000
+    w0 <- 10000
+    
+    analytics.high$w_star.binary <- (K.value*(1-1.0/analytics.high$b_m))*analytics.high$wU/w0 >=1 
+    
+    
+    #Create a subset of the simulation/analytics/approximation data
+    simulation.high<-subset(simulation, simulation$wU==wU.value & simulation$b_m==bM.value & simulation$Kmax==K.value, select=c(p_soft,p_hard,p_ext,alpha))
+    analytics.high.subset<-subset(analytics.high, analytics.high$wU==wU.value & analytics.high$b_m==bM.value, select=c(p_hard,p_rescue,alpha,w_star.binary))
+    
+    #Plot subset
+    xlabel<-expression(italic(alpha))
+    ylabel<-expression(italic(P)[soft/hard/ext.])
+    plot_title<-substitute(paste(italic(w[0]),italic(mu),"=",wu,", ",italic(b[m]),"=",bm),list(wu=wU.value,bm=bM.value))
+    p <- ggplot(simulation.high,aes(x=alpha,y=p_soft)) +
+      geom_ribbon(aes(ymax=p_soft,ymin=0,fill=col1),alpha=0.6) + 
+      geom_ribbon(aes(ymax=p_hard+p_soft,ymin=p_soft,fill=col2),alpha=0.6) +
+      geom_ribbon(aes(ymax=p_hard+p_soft+p_ext,ymin=p_hard+p_soft,fill=col3),alpha=0.6)  +
+      scale_fill_manual(values=c(col1,col2,col3),labels=c("soft","hard","ext."),name="Simulation") +
+      geom_point(data=analytics.high.subset,aes(x=alpha,y=p_rescue,color=col2),size =3) +
+      geom_point(data=analytics.high.subset,aes(x=alpha,y=p_rescue-p_hard,color=col1),size=3,shape=21) +
+      geom_point(data=analytics.high.subset[analytics.high.subset$w_star.binary==TRUE,],aes(x=alpha,y=p_rescue-p_hard),color=col1,size=3,shape=21,fill=col1) +
+      scale_color_manual(values=c(col1,col2),labels=c("soft","rescue"),name="Analysis") +
+      scale_x_log10(breaks=simulation.high$alpha) +
+      xlab(xlabel) +
+      ylab(ylabel) +
+      ggtitle(plot_title) +
+      theme_bw() +
+      theme(plot.title = element_text(size=11, margin = unit(c(0.01,0.01,0.01,0.01), "cm")),
+            axis.title.x = element_text(size=11),
+            axis.text.x = element_text(size=9), 
+            axis.title.y = element_text(size=11),
+            axis.text.y = element_text(size=9),
+            legend.title = element_text(size=11),
+            legend.background = element_rect(fill="transparent"),
+            legend.text = element_text(size=11),
+            plot.margin=unit(c(0.1,0.1,0.1,0.1), "cm"))
+    plot.name<-paste("p",3*i-(3-j),sep="")
+    assign(plot.name,p)
+  }
+}
+
+pdf(file="HighDensity_Rescue_Hard_Soft_Comparison.pdf",width=6.83,height=7,paper="special")
+grid.arrange(
+  arrangeGrob(p1 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p2 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p3 + guides(fill = guide_legend(override.aes= list(alpha = 0.5))) + theme(axis.title.x = element_blank(),axis.title.y = element_blank(), legend.box = "horizontal", legend.position=c(0.5,0.4)),
+              p4 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p5 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p6 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p7 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p8 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p9 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"), 
+              ncol=3,
+              left = textGrob(ylabel, rot = 90, vjust = 1,gp = gpar(fontsize = 11, col = "black"))),
+              sub = textGrob(xlabel,vjust=0,gp = gpar(fontsize = 11, col = "black")),
+  heights=c(0.95,0.05))
+dev.off()
+
+grid.arrange(
+  arrangeGrob(p1 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p2 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p3 + guides(fill = guide_legend(override.aes= list(alpha = 0.5))) + theme(axis.title.x = element_blank(),axis.title.y = element_blank(), legend.box = "horizontal", legend.position=c(0.5,0.4)),
+              p4 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p5 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p6 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p7 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p8 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p9 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"), 
+              ncol=3,
+              left = textGrob(ylabel, rot = 90, vjust = 1,gp = gpar(fontsize = 11, col = "black"))),
+              sub = textGrob(xlabel,vjust=0,gp = gpar(fontsize = 11, col = "black")),
+  heights=c(0.95,0.05))
+
+```
+
+
+```{r create plots for low-density rescue (grid style)}
+
+#################################Create plots for low rescue###########################
+for(i in 1:length(wU.values)){
+  for(j in 1:length(bM.values)){
+    wU.value <-wU.values[i]
+    bM.value <-bM.values[j]
+    K.value <-110000
+    w0 <- 10000
+    
+    
+    analytics.low$w_star.binary <- analytics.low$wU >=1
+    approximations$w_star.binary <- approximations$wU >=1
+    
+    
+    #Create a subset of the simulation data
+    simulation.low<-subset(simulation, simulation$wU==wU.value & simulation$b_m==bM.value & simulation$Kmax==K.value, select=c(p_soft,p_hard,p_ext,alpha))
+    analytics.low.subset<-subset(analytics.low, analytics.low$wU==wU.value & analytics.low$b_m==bM.value, select=c(p_hard,p_rescue,alpha,w_star.binary))
+    approximations.low<-subset(approximations, approximations$wU==wU.value & approximations$b_m==bM.value, select=c(p_hard,p_rescue,alpha,w_star.binary))
+    
+    #Plot subset
+    xlabel<-expression(italic(alpha))
+    ylabel<-expression(italic(P)[soft/hard/ext.])
+    plot_title<-substitute(paste(italic(w[0]),italic(mu),"=",wu,", ",italic(b[m]),"=",bm),list(wu=wU.value,bm=bM.value))
+    p <- ggplot(simulation.low,aes(x=alpha,y=p_soft)) +
+      geom_ribbon(aes(ymax=p_soft,ymin=0,fill=col4),alpha=0.5) + 
+      geom_ribbon(aes(ymax=p_hard+p_soft,ymin=p_soft,fill=col5),alpha=0.5) +
+      geom_ribbon(aes(ymax=p_hard+p_soft+p_ext,ymin=p_hard+p_soft,fill=col6),alpha=0.5)  +
+      scale_fill_manual(values=c(col4,col5,col6),labels=c("soft","hard","ext."),name="Simulation") +
+      geom_point(data=analytics.low.subset,aes(x=alpha,y=p_rescue,color=col5),size =3) +
+      geom_point(data=analytics.low.subset,aes(x=alpha,y=p_rescue-p_hard,color=col4),size=3,shape=21) +
+      geom_point(data=analytics.low.subset[analytics.low.subset$w_star.binary==TRUE,],aes(x=alpha,y=p_rescue-p_hard),color=col4,size=3,shape=21,fill=col4) +
+      scale_color_manual(values=c(col4,col5),labels=c("soft","rescue"),name="Analysis") +
+      
+      geom_line(data=approximations.low,aes(x=alpha,y=p_rescue,color=col5),size = 1) +
+      geom_line(data=approximations.low[which(approximations.low$w_star.binary==TRUE),],aes(x=alpha,y=p_rescue-p_hard),color=col4,size=0.5) +
+      geom_line(data=approximations.low[which(approximations.low$w_star.binary==FALSE),],aes(x=alpha,y=p_rescue-p_hard),color=col4,size=0.5, linetype = 2) +
+      
+      
+      scale_x_log10(breaks=simulation.low$alpha) +
+      xlab(xlabel) +
+      ylab(ylabel) +
+      ggtitle(plot_title) +
+      theme_bw() +
+      theme(plot.title = element_text(size=11, margin = unit(c(0.01,0.01,0.01,0.01), "cm")),
+            axis.title.x = element_text(size=11),
+            axis.text.x = element_text(size=9), 
+            axis.title.y = element_text(size=11),
+            axis.text.y = element_text(size=9),
+            legend.title = element_text(size=11),
+            legend.background = element_rect(fill="transparent"),
+            legend.text = element_text(size=11),
+            plot.margin=unit(c(0.1,0.1,0.1,0.1), "cm"))
+    plot.name<-paste("p",3*i-(3-j),sep="")
+    assign(plot.name,p)
+  }
+}
+
+
+pdf(file="LowDensity_Rescue_Hard_Soft_Comparison.pdf",width=6.83,height=7)
+grid.arrange(
+  arrangeGrob(p1 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p2 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p3 +  guides(fill = guide_legend(override.aes= list(alpha = 0.5))) + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.box = "horizontal",legend.position=c(0.5,0.4)),
+              p4 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p5 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p6 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p7 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p8 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p9 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              nrow=3,
+              left = textGrob(ylabel, rot = 90, vjust = 1,gp = gpar(fontsize = 11, col = "black"))),
+  sub = textGrob(xlabel,vjust=1,gp = gpar(fontsize = 11, col = "black")),
+  heights=c(0.95,0.05)
+  )
+dev.off()
+
+grid.arrange(
+  arrangeGrob(p1 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p2 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p3 +  guides(fill = guide_legend(override.aes= list(alpha = 0.5))) + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.box = "horizontal",legend.position=c(0.5,0.4)),
+              p4 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p5 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p6 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p7 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p8 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              p9 + theme(axis.title.x = element_blank(),axis.title.y = element_blank(),legend.position="none"),
+              nrow=3,
+              left = textGrob(ylabel, rot = 90, vjust = 1,gp = gpar(fontsize = 11, col = "black"))),
+  sub = textGrob(xlabel,vjust=1,gp = gpar(fontsize = 11, col = "black")),
+  heights=c(0.95,0.05)
+  )
+
+
+
+```
+

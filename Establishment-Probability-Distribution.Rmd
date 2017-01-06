@@ -1,0 +1,144 @@
+---
+title: "Establishment-Probability-Distribution"
+author: "Ben Wilson"
+date: "November 16, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r load libraries, define colorblind friendly color palette}
+library(RColorBrewer)
+library(reshape2)
+library(plyr)
+library(grid)
+library(ggplot2)
+library(scales)
+library(gridExtra)
+
+cbPalette <- c(brewer.pal(6,"RdYlBu"))
+
+col1<-cbPalette[6]
+col2<-cbPalette[5]
+col3<-cbPalette[1]
+```
+
+
+```{r define constants for specific parameter set}
+
+t.star <- -log(1-(1/1.3))/0.01
+p.inf<-2/(1+(1.3+1)/(1.3-1))
+```
+
+```{r read in analytic predictions for p_est(t)}
+
+#Read in output to table
+p.est.low.slow<-read.table("../Analytics/p_est_low.csv", header=FALSE, sep=",")
+colnames(p.est.low.slow)<-c('t','p_est')
+p.est.low.slow$type<-'0'
+
+p.est.high<-read.table("../Analytics/p_est_high.csv", header=FALSE, sep=",")
+colnames(p.est.high)<-c('t','p_est')
+p.est.high$type<-'2'
+p.distributions<-rbind(p.est.low.slow,p.est.high)
+```
+
+
+```{r generate plots for comparing simulation and analytic results}
+#Plot labels
+xlabel<-expression(italic(t))
+ylabel<-expression(paste(italic(p)[est.],italic((t))))
+plabel<-expression(italic(p)[infinity])
+
+############### P_EST DISTRIBUTIONS ######################
+p <- ggplot(p.distributions,aes(x=t,y=p_est)) +
+  geom_line(aes(colour=type)) + 
+  geom_vline(aes(xintercept=t.star),linetype="dashed",alpha=0.5)+
+  scale_colour_manual(values=c(col1,col3),labels=c("low-density","high-density"),name="") +
+  scale_y_continuous(breaks=c(0, p.inf),labels=c(0,""))+
+  geom_hline(aes(yintercept=p.inf),linetype="dashed",alpha=0.5)+
+  xlim(0,600) +
+  xlab(xlabel) +
+  ylab(ylabel) +
+  theme_bw() +
+  theme(#plot.title = element_text(size=12),
+    axis.title.x = element_text(size=11),
+    axis.text.y = element_text(size=11),
+    axis.title.y = element_text(size=11),
+    axis.ticks = element_blank(),
+    axis.text.x=element_blank(),
+    legend.title = element_text(size=11),
+    legend.text = element_text(size=11),
+    legend.background = element_rect(fill="transparent"),
+    legend.position = c(0.75,0.25),
+    panel.grid.major = element_blank(),
+    plot.margin=unit(c(0,0.1,0,0.1), "cm"))
+p
+
+```
+
+```{r read in analytic predictions for R(t)}
+
+#Read in output to table
+R.low<-read.table("../Analytics/R_low.csv", header=FALSE, sep=",")
+colnames(R.low)<-c('t','R')
+R.low$type<-'0'
+R.high<-read.table("../Analytics/R_high.csv", header=FALSE, sep=",")
+colnames(R.high)<-c('t','R')
+R.high$type<-'2'
+R.distributions<-rbind(R.low,R.high)
+
+```
+
+```{r generate plot for R(t)}
+############### R DISTRIBUTIONS ######################
+#Plot labels
+xlabel<-expression(italic(t))
+ylabel<-expression(italic(R(t)))
+tlabel<-expression(italic(t)^"*")
+
+r <- ggplot(R.distributions,aes(x=t,y=R)) +
+  geom_line(aes(colour=type)) + 
+  geom_vline(aes(xintercept=t.star),linetype="dashed",alpha=0.5)+
+  scale_colour_manual(values=c(col1,col3),labels=c("low-density","high-density"),name="") +
+  scale_y_continuous(breaks = c(0), labels = c(0)) +
+  scale_x_continuous(breaks=c(0), labels = c(0)) +
+  geom_ribbon(data=subset(R.distributions,type==0),aes(x=t,ymax=R),ymin=0,fill=col1, alpha=0.1)+
+  geom_ribbon(data=subset(R.distributions,type==2),aes(x=t,ymax=R),ymin=0,fill=col3, alpha=0.1)+
+  xlim(0,600) +
+  xlab(xlabel) +
+  ylab(ylabel) +
+  theme_bw() +
+  theme(#plot.title = element_text(size=12),
+    axis.title.x = element_text(size=11),
+    axis.text.y = element_text(size=11),
+    axis.title.y = element_text(size=11),
+    axis.ticks = element_blank(),
+    axis.text.x = element_text(size=11),
+    legend.title = element_text(size=11),
+    legend.text = element_text(size=11),
+    legend.background = element_rect(fill="transparent"),
+    legend.position = c(0.75,0.25),
+    panel.grid.major = element_blank(),
+    plot.margin=unit(c(0,0.1,0,0.1), "cm"))
+r
+```
+
+```{r generate combined plot with p_est(t) and R(t)}
+pdf(file="Establishment_Probability_Distribution.pdf",width=3.92,height=8)
+grid.arrange(
+  arrangeGrob(p + annotate("text",x=0.15,y=0.25,label="A",size=4,fontface="bold") + annotate("text",x=600,y=p.inf,label=paste(plabel),parse=TRUE,size=4,vjust=-1) + annotate("text",x=t.star+20,y=0,label=paste(tlabel),parse=TRUE,size=4) + theme(axis.title.x = element_blank(),axis.title.y = element_text(size=11),plot.title = element_blank(),legend.position=c(0.75,0.25)),
+              r + annotate("text",x=0.15,y=0.17,label="B",size=4,fontface="bold") + theme(axis.title.x = element_blank(),axis.title.y = element_text(size=11),plot.title = element_blank(),legend.position="none"),
+              nrow=2),
+  ncol=1,
+  sub = textGrob(xlabel,vjust=1, gp = gpar(fontsize = 11)),
+  heights=c(0.95,0.05)
+)
+dev.off()
+
+```
+
